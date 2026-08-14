@@ -1,9 +1,9 @@
 // Copyright 2020 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use super::ApproxZeroUlps;
 use super::{ImageRef, ImageRefMut, f32_bound};
 use rgb::RGBA8;
-use usvg::ApproxZeroUlps;
 
 /// Performs an arithmetic composition.
 ///

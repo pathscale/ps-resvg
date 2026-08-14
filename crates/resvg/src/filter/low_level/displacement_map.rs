@@ -2,7 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::{ImageRef, ImageRefMut};
-use usvg::filter::{ColorChannel, DisplacementMap};
+
+/// A color channel.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum ColorChannel {
+    R,
+    G,
+    B,
+    A,
+}
 
 /// Applies a displacement map.
 ///
@@ -13,7 +22,9 @@ use usvg::filter::{ColorChannel, DisplacementMap};
 ///
 /// `src`, `map` and `dest` dimensions must match.
 pub fn apply(
-    fe: &DisplacementMap,
+    x_channel_selector: ColorChannel,
+    y_channel_selector: ColorChannel,
+    scale: f32,
     sx: f32,
     sy: f32,
     src: ImageRef,
@@ -40,10 +51,10 @@ pub fn apply(
             c as f32 / 255.0 - 0.5
         };
 
-        let dx = calc_offset(fe.x_channel_selector());
-        let dy = calc_offset(fe.y_channel_selector());
-        let ox = (x as f32 + dx * sx * fe.scale()).round() as i32;
-        let oy = (y as f32 + dy * sy * fe.scale()).round() as i32;
+        let dx = calc_offset(x_channel_selector);
+        let dy = calc_offset(y_channel_selector);
+        let ox = (x as f32 + dx * sx * scale).round() as i32;
+        let oy = (y as f32 + dy * sy * scale).round() as i32;
 
         // TODO: we should use some kind of anti-aliasing when offset is on a pixel border
 

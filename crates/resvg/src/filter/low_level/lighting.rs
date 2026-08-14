@@ -1,10 +1,94 @@
 // Copyright 2020 the Resvg Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use super::{ImageRef, ImageRefMut, f32_bound};
+use super::{ApproxZeroUlps, ImageRef, ImageRefMut, f32_bound};
 use rgb::RGBA8;
-use usvg::filter::{DiffuseLighting, LightSource, SpecularLighting};
-use usvg::{ApproxEqUlps, ApproxZeroUlps, Color};
+use strict_num::ApproxEqUlps;
+
+/// An RGB color used as a lighting color.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug)]
+pub struct Rgb8 {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+impl Rgb8 {
+    const BLACK: Rgb8 = Rgb8 { r: 0, g: 0, b: 0 };
+}
+
+/// A directional light source.
+#[derive(Clone, Copy, Debug)]
+pub struct DistantLight {
+    /// A direction angle for the light source on the XY plane
+    /// (clockwise), in degrees from the X axis.
+    pub azimuth: f32,
+    /// A direction angle for the light source from the XY plane towards
+    /// the Z axis, in degrees.
+    pub elevation: f32,
+}
+
+/// A point light source.
+///
+/// Coordinates are in image-local space.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug)]
+pub struct PointLight {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+/// A spot light source.
+///
+/// Coordinates are in image-local space.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug)]
+pub struct SpotLight {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub points_at_x: f32,
+    pub points_at_y: f32,
+    pub points_at_z: f32,
+    /// Must be positive.
+    pub specular_exponent: f32,
+    pub limiting_cone_angle: Option<f32>,
+}
+
+/// A light source.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug)]
+pub enum LightSource {
+    DistantLight(DistantLight),
+    PointLight(PointLight),
+    SpotLight(SpotLight),
+}
+
+/// A diffuse lighting.
+#[derive(Clone, Copy, Debug)]
+pub struct DiffuseLighting {
+    /// A surface scale.
+    pub surface_scale: f32,
+    /// A diffuse constant.
+    pub diffuse_constant: f32,
+    /// A lighting color.
+    pub lighting_color: Rgb8,
+}
+
+/// A specular lighting.
+#[derive(Clone, Copy, Debug)]
+pub struct SpecularLighting {
+    /// A surface scale.
+    pub surface_scale: f32,
+    /// A specular constant.
+    pub specular_constant: f32,
+    /// A specular exponent.
+    pub specular_exponent: f32,
+    /// A lighting color.
+    pub lighting_color: Rgb8,
+}
 
 const FACTOR_1_2: f32 = 1.0 / 2.0;
 const FACTOR_1_3: f32 = 1.0 / 3.0;
@@ -141,7 +225,7 @@ pub fn diffuse_lighting(
         let k = if normal.normal.approx_zero() {
             light_vector.z
         } else {
-            let mut n = normal.normal * (fe.surface_scale() / 255.0);
+            let mut n = normal.normal * (fe.surface_scale / 255.0);
             n.x *= normal.factor.x;
             n.y *= normal.factor.y;
 
@@ -150,13 +234,13 @@ pub fn diffuse_lighting(
             normal.dot(&light_vector) / normal.length()
         };
 
-        fe.diffuse_constant() * k
+        fe.diffuse_constant * k
     };
 
     apply(
         light_source,
-        fe.surface_scale(),
-        fe.lighting_color(),
+        fe.surface_scale,
+        fe.lighting_color,
         &light_factor,
         calc_diffuse_alpha,
         src,
@@ -190,33 +274,33 @@ pub fn specular_lighting(
 
         let k = if normal.normal.approx_zero() {
             let n_dot_h = h.z / h_length;
-            if fe.specular_exponent().approx_eq_ulps(&1.0, 4) {
+            if fe.specular_exponent.approx_eq_ulps(&1.0, 4) {
                 n_dot_h
             } else {
-                n_dot_h.powf(fe.specular_exponent())
+                n_dot_h.powf(fe.specular_exponent)
             }
         } else {
-            let mut n = normal.normal * (fe.surface_scale() / 255.0);
+            let mut n = normal.normal * (fe.surface_scale / 255.0);
             n.x *= normal.factor.x;
             n.y *= normal.factor.y;
 
             let normal = Vector3::new(n.x, n.y, 1.0);
 
             let n_dot_h = normal.dot(&h) / normal.length() / h_length;
-            if fe.specular_exponent().approx_eq_ulps(&1.0, 4) {
+            if fe.specular_exponent.approx_eq_ulps(&1.0, 4) {
                 n_dot_h
             } else {
-                n_dot_h.powf(fe.specular_exponent())
+                n_dot_h.powf(fe.specular_exponent)
             }
         };
 
-        fe.specular_constant() * k
+        fe.specular_constant * k
     };
 
     apply(
         light_source,
-        fe.surface_scale(),
-        fe.lighting_color(),
+        fe.surface_scale,
+        fe.lighting_color,
         &light_factor,
         calc_specular_alpha,
         src,
@@ -227,7 +311,7 @@ pub fn specular_lighting(
 fn apply(
     light_source: LightSource,
     surface_scale: f32,
-    lighting_color: Color,
+    lighting_color: Rgb8,
     light_factor: &dyn Fn(Normal, Vector3) -> f32,
     calc_alpha: fn(u8, u8, u8) -> u8,
     src: ImageRef,
@@ -276,9 +360,9 @@ fn apply(
 
         let compute = |x| (f32_bound(0.0, x as f32 * factor, 255.0) + 0.5) as u8;
 
-        let r = compute(light_color.red);
-        let g = compute(light_color.green);
-        let b = compute(light_color.blue);
+        let r = compute(light_color.r);
+        let g = compute(light_color.g);
+        let b = compute(light_color.b);
         let a = calc_alpha(r, g, b);
 
         *dest.pixel_at_mut(nx, ny) = RGBA8 { b, g, r, a };
@@ -306,7 +390,7 @@ fn apply(
     }
 }
 
-fn light_color(light: &LightSource, lighting_color: Color, light_vector: Vector3) -> Color {
+fn light_color(light: &LightSource, lighting_color: Rgb8, light_vector: Vector3) -> Rgb8 {
     match *light {
         LightSource::DistantLight(_) | LightSource::PointLight(_) => lighting_color,
         LightSource::SpotLight(ref light) => {
@@ -316,23 +400,23 @@ fn light_color(light: &LightSource, lighting_color: Color, light_vector: Vector3
             let direction = direction.normalized().unwrap_or(direction);
             let minus_l_dot_s = -light_vector.dot(&direction);
             if minus_l_dot_s <= 0.0 {
-                return Color::black();
+                return Rgb8::BLACK;
             }
 
             if let Some(limiting_cone_angle) = light.limiting_cone_angle {
                 if minus_l_dot_s < limiting_cone_angle.to_radians().cos() {
-                    return Color::black();
+                    return Rgb8::BLACK;
                 }
             }
 
-            let factor = minus_l_dot_s.powf(light.specular_exponent.get());
+            let factor = minus_l_dot_s.powf(light.specular_exponent);
             let compute = |x| (f32_bound(0.0, x as f32 * factor, 255.0) + 0.5) as u8;
 
-            Color::new_rgb(
-                compute(lighting_color.red),
-                compute(lighting_color.green),
-                compute(lighting_color.blue),
-            )
+            Rgb8 {
+                r: compute(lighting_color.r),
+                g: compute(lighting_color.g),
+                b: compute(lighting_color.b),
+            }
         }
     }
 }

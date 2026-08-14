@@ -3,7 +3,15 @@
 
 use super::ImageRefMut;
 use rgb::RGBA8;
-use usvg::filter::MorphologyOperator;
+
+/// A morphology operation.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum MorphologyOperator {
+    /// Erode operation.
+    Erode,
+    /// Dilate operation.
+    Dilate,
+}
 
 /// Applies a morphology filter.
 ///
@@ -23,7 +31,7 @@ pub fn apply(operator: MorphologyOperator, rx: f32, ry: f32, src: ImageRefMut) {
     let height_max = src.height as i32 - 1;
 
     let mut buf = vec![RGBA8::default(); src.data.len()];
-    let mut buf = ImageRefMut::new(src.width, src.height, &mut buf);
+    let mut buf = ImageRefMut::from_pixels(&mut buf, src.width, src.height);
     let mut x = 0;
     let mut y = 0;
     for _ in src.data.iter() {

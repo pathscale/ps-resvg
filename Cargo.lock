@@ -530,6 +530,7 @@ dependencies = [
  "pico-args",
  "png",
  "rgb",
+ "strict-num",
  "svgtypes",
  "tiny-skia",
  "usvg",

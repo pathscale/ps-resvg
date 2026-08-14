@@ -3,7 +3,18 @@
 
 use super::{ImageRefMut, f32_bound};
 use rgb::RGBA8;
-use usvg::filter::ColorMatrixKind as ColorMatrix;
+/// A color matrix.
+#[derive(Clone, Copy, Debug)]
+pub enum ColorMatrix<'a> {
+    /// A 4x5 matrix in a row-major order.
+    Matrix(&'a [f32; 20]),
+    /// A saturation amount. Negative values will be clamped to zero.
+    Saturate(f32),
+    /// A rotation angle in degrees.
+    HueRotate(f32),
+    /// Converts the luminance into the alpha channel.
+    LuminanceToAlpha,
+}
 
 /// Applies a color matrix filter.
 ///
@@ -26,7 +37,7 @@ pub fn apply(matrix: &ColorMatrix, src: ImageRefMut) {
             }
         }
         ColorMatrix::Saturate(v) => {
-            let v = v.get().max(0.0);
+            let v = v.max(0.0);
             let m = [
                 0.213 + 0.787 * v,
                 0.715 - 0.715 * v,

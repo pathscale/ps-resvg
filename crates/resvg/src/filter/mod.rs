@@ -3,85 +3,18 @@
 
 use std::rc::Rc;
 
-use rgb::{FromSlice, RGBA8};
+use rgb::FromSlice;
 use tiny_skia::IntRect;
 use usvg::{ApproxEqUlps, ApproxZeroUlps};
 
-mod box_blur;
-mod color_matrix;
-mod component_transfer;
-mod composite;
-mod convolve_matrix;
-mod displacement_map;
-mod iir_blur;
-mod lighting;
-mod morphology;
-mod turbulence;
+mod low_level;
+
+use low_level::{
+    ImageRef, ImageRefMut, box_blur, color_matrix, component_transfer, composite, convolve_matrix,
+    displacement_map, iir_blur, lighting, morphology, turbulence,
+};
 
 // TODO: apply single primitive filters in-place
-
-/// An image reference.
-///
-/// Image pixels should be stored in RGBA order.
-///
-/// Some filters will require premultiplied channels, some not.
-/// See specific filter documentation for details.
-#[derive(Clone, Copy)]
-pub struct ImageRef<'a> {
-    data: &'a [RGBA8],
-    width: u32,
-    height: u32,
-}
-
-impl<'a> ImageRef<'a> {
-    /// Creates a new image reference.
-    ///
-    /// Doesn't clone the provided data.
-    #[inline]
-    pub fn new(width: u32, height: u32, data: &'a [RGBA8]) -> Self {
-        ImageRef {
-            data,
-            width,
-            height,
-        }
-    }
-
-    #[inline]
-    fn alpha_at(&self, x: u32, y: u32) -> i16 {
-        self.data[(self.width * y + x) as usize].a as i16
-    }
-}
-
-/// A mutable `ImageRef` variant.
-pub struct ImageRefMut<'a> {
-    data: &'a mut [RGBA8],
-    width: u32,
-    height: u32,
-}
-
-impl<'a> ImageRefMut<'a> {
-    /// Creates a new mutable image reference.
-    ///
-    /// Doesn't clone the provided data.
-    #[inline]
-    pub fn new(width: u32, height: u32, data: &'a mut [RGBA8]) -> Self {
-        ImageRefMut {
-            data,
-            width,
-            height,
-        }
-    }
-
-    #[inline]
-    fn pixel_at(&self, x: u32, y: u32) -> RGBA8 {
-        self.data[(self.width * y + x) as usize]
-    }
-
-    #[inline]
-    fn pixel_at_mut(&mut self, x: u32, y: u32) -> &mut RGBA8 {
-        &mut self.data[(self.width * y + x) as usize]
-    }
-}
 
 #[derive(Debug)]
 pub(crate) enum Error {
@@ -113,143 +46,15 @@ impl PixmapExt for tiny_skia::Pixmap {
     }
 
     fn into_srgb(&mut self) {
-        demultiply_alpha(self.data_mut().as_rgba_mut());
-        from_linear_rgb(self.data_mut().as_rgba_mut());
-        multiply_alpha(self.data_mut().as_rgba_mut());
+        low_level::demultiply_alpha(self.data_mut());
+        low_level::from_linear_rgb(self.data_mut());
+        low_level::multiply_alpha(self.data_mut());
     }
 
     fn into_linear_rgb(&mut self) {
-        demultiply_alpha(self.data_mut().as_rgba_mut());
-        into_linear_rgb(self.data_mut().as_rgba_mut());
-        multiply_alpha(self.data_mut().as_rgba_mut());
-    }
-}
-
-/// Multiplies provided pixels alpha.
-fn multiply_alpha(data: &mut [RGBA8]) {
-    for p in data {
-        let a = p.a as f32 / 255.0;
-        p.b = (p.b as f32 * a + 0.5) as u8;
-        p.g = (p.g as f32 * a + 0.5) as u8;
-        p.r = (p.r as f32 * a + 0.5) as u8;
-    }
-}
-
-/// Demultiplies provided pixels alpha.
-fn demultiply_alpha(data: &mut [RGBA8]) {
-    for p in data {
-        let a = p.a as f32 / 255.0;
-        p.b = (p.b as f32 / a + 0.5) as u8;
-        p.g = (p.g as f32 / a + 0.5) as u8;
-        p.r = (p.r as f32 / a + 0.5) as u8;
-    }
-}
-
-/// Precomputed sRGB to LinearRGB table.
-///
-/// Since we are storing the result in `u8`, there is no need to compute those
-/// values each time. Mainly because it's very expensive.
-///
-/// ```text
-/// if (C_srgb <= 0.04045)
-///     C_lin = C_srgb / 12.92;
-///  else
-///     C_lin = pow((C_srgb + 0.055) / 1.055, 2.4);
-/// ```
-///
-/// Thanks to librsvg for the idea.
-#[rustfmt::skip]
-const SRGB_TO_LINEAR_RGB_TABLE: &[u8; 256] = &[
-    0,   0,   0,   0,   0,   0,  0,    1,   1,   1,   1,   1,   1,   1,   1,   1,
-    1,   1,   2,   2,   2,   2,  2,    2,   2,   2,   3,   3,   3,   3,   3,   3,
-    4,   4,   4,   4,   4,   5,  5,    5,   5,   6,   6,   6,   6,   7,   7,   7,
-    8,   8,   8,   8,   9,   9,  9,   10,  10,  10,  11,  11,  12,  12,  12,  13,
-    13,  13,  14,  14,  15,  15,  16,  16,  17,  17,  17,  18,  18,  19,  19,  20,
-    20,  21,  22,  22,  23,  23,  24,  24,  25,  25,  26,  27,  27,  28,  29,  29,
-    30,  30,  31,  32,  32,  33,  34,  35,  35,  36,  37,  37,  38,  39,  40,  41,
-    41,  42,  43,  44,  45,  45,  46,  47,  48,  49,  50,  51,  51,  52,  53,  54,
-    55,  56,  57,  58,  59,  60,  61,  62,  63,  64,  65,  66,  67,  68,  69,  70,
-    71,  72,  73,  74,  76,  77,  78,  79,  80,  81,  82,  84,  85,  86,  87,  88,
-    90,  91,  92,  93,  95,  96,  97,  99, 100, 101, 103, 104, 105, 107, 108, 109,
-    111, 112, 114, 115, 116, 118, 119, 121, 122, 124, 125, 127, 128, 130, 131, 133,
-    134, 136, 138, 139, 141, 142, 144, 146, 147, 149, 151, 152, 154, 156, 157, 159,
-    161, 163, 164, 166, 168, 170, 171, 173, 175, 177, 179, 181, 183, 184, 186, 188,
-    190, 192, 194, 196, 198, 200, 202, 204, 206, 208, 210, 212, 214, 216, 218, 220,
-    222, 224, 226, 229, 231, 233, 235, 237, 239, 242, 244, 246, 248, 250, 253, 255,
-];
-
-/// Precomputed LinearRGB to sRGB table.
-///
-/// Since we are storing the result in `u8`, there is no need to compute those
-/// values each time. Mainly because it's very expensive.
-///
-/// ```text
-/// if (C_lin <= 0.0031308)
-///     C_srgb = C_lin * 12.92;
-/// else
-///     C_srgb = 1.055 * pow(C_lin, 1.0 / 2.4) - 0.055;
-/// ```
-///
-/// Thanks to librsvg for the idea.
-#[rustfmt::skip]
-const LINEAR_RGB_TO_SRGB_TABLE: &[u8; 256] = &[
-    0,  13,  22,  28,  34,  38,  42,  46,  50,  53,  56,  59,  61,  64,  66,  69,
-    71,  73,  75,  77,  79,  81,  83,  85,  86,  88,  90,  92,  93,  95,  96,  98,
-    99, 101, 102, 104, 105, 106, 108, 109, 110, 112, 113, 114, 115, 117, 118, 119,
-    120, 121, 122, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136,
-    137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 148, 149, 150, 151,
-    152, 153, 154, 155, 155, 156, 157, 158, 159, 159, 160, 161, 162, 163, 163, 164,
-    165, 166, 167, 167, 168, 169, 170, 170, 171, 172, 173, 173, 174, 175, 175, 176,
-    177, 178, 178, 179, 180, 180, 181, 182, 182, 183, 184, 185, 185, 186, 187, 187,
-    188, 189, 189, 190, 190, 191, 192, 192, 193, 194, 194, 195, 196, 196, 197, 197,
-    198, 199, 199, 200, 200, 201, 202, 202, 203, 203, 204, 205, 205, 206, 206, 207,
-    208, 208, 209, 209, 210, 210, 211, 212, 212, 213, 213, 214, 214, 215, 215, 216,
-    216, 217, 218, 218, 219, 219, 220, 220, 221, 221, 222, 222, 223, 223, 224, 224,
-    225, 226, 226, 227, 227, 228, 228, 229, 229, 230, 230, 231, 231, 232, 232, 233,
-    233, 234, 234, 235, 235, 236, 236, 237, 237, 238, 238, 238, 239, 239, 240, 240,
-    241, 241, 242, 242, 243, 243, 244, 244, 245, 245, 246, 246, 246, 247, 247, 248,
-    248, 249, 249, 250, 250, 251, 251, 251, 252, 252, 253, 253, 254, 254, 255, 255,
-];
-
-/// Converts input pixel from sRGB into LinearRGB.
-///
-/// Provided pixels should have an **unpremultiplied alpha**.
-///
-/// RGB channels order of the input image doesn't matter, but alpha channel must be the last one.
-fn into_linear_rgb(data: &mut [RGBA8]) {
-    for p in data {
-        p.r = SRGB_TO_LINEAR_RGB_TABLE[p.r as usize];
-        p.g = SRGB_TO_LINEAR_RGB_TABLE[p.g as usize];
-        p.b = SRGB_TO_LINEAR_RGB_TABLE[p.b as usize];
-    }
-}
-
-/// Converts input pixel from LinearRGB into sRGB.
-///
-/// Provided pixels should have an **unpremultiplied alpha**.
-///
-/// RGB channels order of the input image doesn't matter, but alpha channel must be the last one.
-fn from_linear_rgb(data: &mut [RGBA8]) {
-    for p in data {
-        p.r = LINEAR_RGB_TO_SRGB_TABLE[p.r as usize];
-        p.g = LINEAR_RGB_TO_SRGB_TABLE[p.g as usize];
-        p.b = LINEAR_RGB_TO_SRGB_TABLE[p.b as usize];
-    }
-}
-
-// TODO: https://github.com/rust-lang/rust/issues/44095
-#[inline]
-fn f32_bound(min: f32, val: f32, max: f32) -> f32 {
-    debug_assert!(min.is_finite());
-    debug_assert!(max.is_finite());
-
-    if val > max {
-        max
-    } else if val >= min {
-        val
-    } else {
-        // Catches `val < min` as well as a NaN `val`.
-        min
+        low_level::demultiply_alpha(self.data_mut());
+        low_level::into_linear_rgb(self.data_mut());
+        low_level::multiply_alpha(self.data_mut());
     }
 }
 
@@ -570,11 +375,12 @@ trait PixmapToImageRef<'a> {
 
 impl<'a> PixmapToImageRef<'a> for tiny_skia::Pixmap {
     fn as_image_ref(&'a self) -> ImageRef<'a> {
-        ImageRef::new(self.width(), self.height(), self.data().as_rgba())
+        ImageRef::new(self.data(), self.width(), self.height()).unwrap()
     }
 
     fn as_image_ref_mut(&'a mut self) -> ImageRefMut<'a> {
-        ImageRefMut::new(self.width(), self.height(), self.data_mut().as_rgba_mut())
+        let (width, height) = (self.width(), self.height());
+        ImageRefMut::new(self.data_mut(), width, height).unwrap()
     }
 }
 
@@ -895,9 +701,15 @@ fn apply_component_transfer(
 ) -> Result<Image, Error> {
     let mut pixmap = input.into_color_space(cs)?.take()?;
 
-    demultiply_alpha(pixmap.data_mut().as_rgba_mut());
-    component_transfer::apply(fe, pixmap.as_image_ref_mut());
-    multiply_alpha(pixmap.data_mut().as_rgba_mut());
+    low_level::demultiply_alpha(pixmap.data_mut());
+    component_transfer::apply(
+        to_transfer_function(fe.func_r()),
+        to_transfer_function(fe.func_g()),
+        to_transfer_function(fe.func_b()),
+        to_transfer_function(fe.func_a()),
+        pixmap.as_image_ref_mut(),
+    );
+    low_level::multiply_alpha(pixmap.data_mut());
 
     Ok(Image::from_image(pixmap, cs))
 }
@@ -909,9 +721,11 @@ fn apply_color_matrix(
 ) -> Result<Image, Error> {
     let mut pixmap = input.into_color_space(cs)?.take()?;
 
-    demultiply_alpha(pixmap.data_mut().as_rgba_mut());
-    color_matrix::apply(fe.kind(), pixmap.as_image_ref_mut());
-    multiply_alpha(pixmap.data_mut().as_rgba_mut());
+    low_level::demultiply_alpha(pixmap.data_mut());
+    if let Some(matrix) = to_color_matrix(fe.kind()) {
+        color_matrix::apply(&matrix, pixmap.as_image_ref_mut());
+    }
+    low_level::multiply_alpha(pixmap.data_mut());
 
     Ok(Image::from_image(pixmap, cs))
 }
@@ -924,10 +738,29 @@ fn apply_convolve_matrix(
     let mut pixmap = input.into_color_space(cs)?.take()?;
 
     if fe.preserve_alpha() {
-        demultiply_alpha(pixmap.data_mut().as_rgba_mut());
+        low_level::demultiply_alpha(pixmap.data_mut());
     }
 
-    convolve_matrix::apply(fe, pixmap.as_image_ref_mut());
+    let edge_mode = match fe.edge_mode() {
+        usvg::filter::EdgeMode::None => low_level::EdgeMode::None,
+        usvg::filter::EdgeMode::Duplicate => low_level::EdgeMode::Duplicate,
+        usvg::filter::EdgeMode::Wrap => low_level::EdgeMode::Wrap,
+    };
+
+    let matrix = low_level::ConvolveMatrix::new(
+        fe.matrix().target_x(),
+        fe.matrix().target_y(),
+        fe.matrix().columns(),
+        fe.matrix().rows(),
+        fe.matrix().data(),
+        fe.divisor().get(),
+        fe.bias(),
+        edge_mode,
+        fe.preserve_alpha(),
+    )
+    .ok_or(Error::InvalidRegion)?;
+
+    convolve_matrix::apply(&matrix, pixmap.as_image_ref_mut());
 
     Ok(Image::from_image(pixmap, cs))
 }
@@ -950,7 +783,12 @@ fn apply_morphology(
         return Ok(Image::from_image(pixmap, cs));
     }
 
-    morphology::apply(fe.operator(), rx, ry, pixmap.as_image_ref_mut());
+    let operator = match fe.operator() {
+        usvg::filter::MorphologyOperator::Erode => low_level::MorphologyOperator::Erode,
+        usvg::filter::MorphologyOperator::Dilate => low_level::MorphologyOperator::Dilate,
+    };
+
+    morphology::apply(operator, rx, ry, pixmap.as_image_ref_mut());
 
     Ok(Image::from_image(pixmap, cs))
 }
@@ -974,7 +812,9 @@ fn apply_displacement_map(
     };
 
     displacement_map::apply(
-        fe,
+        to_color_channel(fe.x_channel_selector()),
+        to_color_channel(fe.y_channel_selector()),
+        fe.scale(),
         sx,
         sy,
         pixmap1.as_image_ref(),
@@ -1012,7 +852,7 @@ fn apply_turbulence(
         pixmap.as_image_ref_mut(),
     );
 
-    multiply_alpha(pixmap.data_mut().as_rgba_mut());
+    low_level::multiply_alpha(pixmap.data_mut());
 
     Ok(Image::from_image(pixmap, cs))
 }
@@ -1028,8 +868,14 @@ fn apply_diffuse_lighting(
 
     let light_source = transform_light_source(fe.light_source(), region, ts);
 
+    let params = low_level::DiffuseLighting {
+        surface_scale: fe.surface_scale(),
+        diffuse_constant: fe.diffuse_constant(),
+        lighting_color: to_rgb8(fe.lighting_color()),
+    };
+
     lighting::diffuse_lighting(
-        fe,
+        &params,
         light_source,
         input.as_ref().as_image_ref(),
         pixmap.as_image_ref_mut(),
@@ -1049,8 +895,15 @@ fn apply_specular_lighting(
 
     let light_source = transform_light_source(fe.light_source(), region, ts);
 
+    let params = low_level::SpecularLighting {
+        surface_scale: fe.surface_scale(),
+        specular_constant: fe.specular_constant(),
+        specular_exponent: fe.specular_exponent(),
+        lighting_color: to_rgb8(fe.lighting_color()),
+    };
+
     lighting::specular_lighting(
-        fe,
+        &params,
         light_source,
         input.as_ref().as_image_ref(),
         pixmap.as_image_ref_mut(),
@@ -1059,42 +912,109 @@ fn apply_specular_lighting(
     Ok(Image::from_image(pixmap, cs))
 }
 
-// TODO: do not modify LightSource
 fn transform_light_source(
-    mut source: usvg::filter::LightSource,
+    source: usvg::filter::LightSource,
     region: IntRect,
     ts: usvg::Transform,
-) -> usvg::filter::LightSource {
+) -> low_level::LightSource {
     use std::f32::consts::SQRT_2;
-    use usvg::filter::LightSource;
 
-    match &mut source {
-        LightSource::DistantLight(..) => {}
-        LightSource::PointLight(light) => {
+    match source {
+        usvg::filter::LightSource::DistantLight(light) => {
+            low_level::LightSource::DistantLight(low_level::DistantLight {
+                azimuth: light.azimuth,
+                elevation: light.elevation,
+            })
+        }
+        usvg::filter::LightSource::PointLight(light) => {
             let mut point = tiny_skia::Point::from_xy(light.x, light.y);
             ts.map_point(&mut point);
-            light.x = point.x - region.x() as f32;
-            light.y = point.y - region.y() as f32;
-            light.z = light.z * (ts.sx * ts.sx + ts.sy * ts.sy).sqrt() / SQRT_2;
+            low_level::LightSource::PointLight(low_level::PointLight {
+                x: point.x - region.x() as f32,
+                y: point.y - region.y() as f32,
+                z: light.z * (ts.sx * ts.sx + ts.sy * ts.sy).sqrt() / SQRT_2,
+            })
         }
-        LightSource::SpotLight(light) => {
+        usvg::filter::LightSource::SpotLight(light) => {
             let sz = (ts.sx * ts.sx + ts.sy * ts.sy).sqrt() / SQRT_2;
 
             let mut point = tiny_skia::Point::from_xy(light.x, light.y);
             ts.map_point(&mut point);
-            light.x = point.x - region.x() as f32;
-            light.y = point.y - region.y() as f32;
-            light.z *= sz;
 
-            let mut point = tiny_skia::Point::from_xy(light.points_at_x, light.points_at_y);
-            ts.map_point(&mut point);
-            light.points_at_x = point.x - region.x() as f32;
-            light.points_at_y = point.y - region.y() as f32;
-            light.points_at_z *= sz;
+            let mut points_at = tiny_skia::Point::from_xy(light.points_at_x, light.points_at_y);
+            ts.map_point(&mut points_at);
+
+            low_level::LightSource::SpotLight(low_level::SpotLight {
+                x: point.x - region.x() as f32,
+                y: point.y - region.y() as f32,
+                z: light.z * sz,
+                points_at_x: points_at.x - region.x() as f32,
+                points_at_y: points_at.y - region.y() as f32,
+                points_at_z: light.points_at_z * sz,
+                specular_exponent: light.specular_exponent.get(),
+                limiting_cone_angle: light.limiting_cone_angle,
+            })
         }
     }
+}
 
-    source
+fn to_rgb8(color: usvg::Color) -> low_level::Rgb8 {
+    low_level::Rgb8 {
+        r: color.red,
+        g: color.green,
+        b: color.blue,
+    }
+}
+
+fn to_color_channel(channel: usvg::filter::ColorChannel) -> low_level::ColorChannel {
+    match channel {
+        usvg::filter::ColorChannel::R => low_level::ColorChannel::R,
+        usvg::filter::ColorChannel::G => low_level::ColorChannel::G,
+        usvg::filter::ColorChannel::B => low_level::ColorChannel::B,
+        usvg::filter::ColorChannel::A => low_level::ColorChannel::A,
+    }
+}
+
+fn to_transfer_function(func: &usvg::filter::TransferFunction) -> low_level::TransferFunction<'_> {
+    match func {
+        usvg::filter::TransferFunction::Identity => low_level::TransferFunction::Identity,
+        usvg::filter::TransferFunction::Table(values) => low_level::TransferFunction::Table(values),
+        usvg::filter::TransferFunction::Discrete(values) => {
+            low_level::TransferFunction::Discrete(values)
+        }
+        usvg::filter::TransferFunction::Linear { slope, intercept } => {
+            low_level::TransferFunction::Linear {
+                slope: *slope,
+                intercept: *intercept,
+            }
+        }
+        usvg::filter::TransferFunction::Gamma {
+            amplitude,
+            exponent,
+            offset,
+        } => low_level::TransferFunction::Gamma {
+            amplitude: *amplitude,
+            exponent: *exponent,
+            offset: *offset,
+        },
+    }
+}
+
+fn to_color_matrix(kind: &usvg::filter::ColorMatrixKind) -> Option<low_level::ColorMatrix<'_>> {
+    match kind {
+        usvg::filter::ColorMatrixKind::Matrix(m) => m
+            .as_slice()
+            .try_into()
+            .ok()
+            .map(low_level::ColorMatrix::Matrix),
+        usvg::filter::ColorMatrixKind::Saturate(v) => {
+            Some(low_level::ColorMatrix::Saturate(v.get()))
+        }
+        usvg::filter::ColorMatrixKind::HueRotate(v) => Some(low_level::ColorMatrix::HueRotate(*v)),
+        usvg::filter::ColorMatrixKind::LuminanceToAlpha => {
+            Some(low_level::ColorMatrix::LuminanceToAlpha)
+        }
+    }
 }
 
 fn apply_to_canvas(input: Image, pixmap: &mut tiny_skia::Pixmap) -> Result<(), Error> {

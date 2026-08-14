@@ -2,27 +2,58 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use super::{ImageRefMut, f32_bound};
-use usvg::filter::{ComponentTransfer, TransferFunction};
+/// A transfer function used by the component transfer operation.
+#[derive(Clone, Copy, Debug)]
+pub enum TransferFunction<'a> {
+    /// Keeps a channel as is.
+    Identity,
+    /// Applies a linear interpolation to a channel.
+    Table(&'a [f32]),
+    /// Applies a step function to a channel.
+    Discrete(&'a [f32]),
+    /// Applies a linear shift to a channel.
+    Linear {
+        /// `slope` term.
+        slope: f32,
+        /// `intercept` term.
+        intercept: f32,
+    },
+    /// Applies an exponential shift to a channel.
+    Gamma {
+        /// `amplitude` term.
+        amplitude: f32,
+        /// `exponent` term.
+        exponent: f32,
+        /// `offset` term.
+        offset: f32,
+    },
+}
 
 /// Applies component transfer functions for each `src` image channel.
 ///
 /// Input image pixels should have an **unpremultiplied alpha**.
-pub fn apply(fe: &ComponentTransfer, src: ImageRefMut) {
+pub fn apply(
+    func_r: TransferFunction,
+    func_g: TransferFunction,
+    func_b: TransferFunction,
+    func_a: TransferFunction,
+    src: ImageRefMut,
+) {
     for pixel in src.data {
-        if !is_dummy(fe.func_r()) {
-            pixel.r = transfer(fe.func_r(), pixel.r);
+        if !is_dummy(&func_r) {
+            pixel.r = transfer(&func_r, pixel.r);
         }
 
-        if !is_dummy(fe.func_b()) {
-            pixel.b = transfer(fe.func_b(), pixel.b);
+        if !is_dummy(&func_b) {
+            pixel.b = transfer(&func_b, pixel.b);
         }
 
-        if !is_dummy(fe.func_g()) {
-            pixel.g = transfer(fe.func_g(), pixel.g);
+        if !is_dummy(&func_g) {
+            pixel.g = transfer(&func_g, pixel.g);
         }
 
-        if !is_dummy(fe.func_a()) {
-            pixel.a = transfer(fe.func_a(), pixel.a);
+        if !is_dummy(&func_a) {
+            pixel.a = transfer(&func_a, pixel.a);
         }
     }
 }
