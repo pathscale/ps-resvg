@@ -15,13 +15,12 @@ name = "resvg"
 required-features = ["svgz", "text", "system-fonts", "memmap-fonts"]
 
 [dependencies]
-bytemuck = "1.16"
 gif = { version = "0.14.1", optional = true }
 image-webp = { version = "0.2.4", optional = true }
 log = "0.4"
 pico-args = { version = "0.5", features = ["eq-separator"] }
+resvg-filters = { path = "../resvg-filters", version = "0.48.1" }
 rgb = "0.8"
-strict-num = "0.1.1"
 svgtypes = "0.16.1"
 tiny-skia = "0.12.0"
 usvg = { path = "../usvg", version = "0.48.1", default-features = false }

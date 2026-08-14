@@ -8,19 +8,36 @@
 //! device pixels and converted into the required color space and alpha
 //! representation. See each function's documentation for its
 //! premultiplied/unpremultiplied alpha requirements.
+//!
+//! Non-goals: this crate does not implement the SVG filter pipeline itself
+//! (filter regions, primitive subregions, transforms or color-interpolation
+//! policies) and does not support row strides other than the image width.
+
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 use rgb::{FromSlice, RGBA8};
 use strict_num::ApproxEqUlps;
 
+#[allow(missing_docs)]
 pub mod box_blur;
+#[allow(missing_docs)]
 pub mod color_matrix;
+#[allow(missing_docs)]
 pub mod component_transfer;
+#[allow(missing_docs)]
 pub mod composite;
+#[allow(missing_docs)]
 pub mod convolve_matrix;
+#[allow(missing_docs)]
 pub mod displacement_map;
+#[allow(missing_docs)]
 pub mod iir_blur;
+#[allow(missing_docs)]
 pub mod lighting;
+#[allow(missing_docs)]
 pub mod morphology;
+#[allow(missing_docs)]
 pub mod turbulence;
 
 pub use color_matrix::ColorMatrix;

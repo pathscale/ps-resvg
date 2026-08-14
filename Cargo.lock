@@ -522,15 +522,14 @@ dependencies = [
 name = "resvg"
 version = "0.48.1"
 dependencies = [
- "bytemuck",
  "gif",
  "image-webp",
  "log",
  "once_cell",
  "pico-args",
  "png",
+ "resvg-filters",
  "rgb",
- "strict-num",
  "svgtypes",
  "tiny-skia",
  "usvg",
@@ -543,6 +542,15 @@ version = "0.48.1"
 dependencies = [
  "log",
  "resvg",
+]
+
+[[package]]
+name = "resvg-filters"
+version = "0.48.1"
+dependencies = [
+ "bytemuck",
+ "rgb",
+ "strict-num",
 ]
 
 [[package]]

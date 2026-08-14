@@ -1,0 +1,15 @@
+[package]
+name = "resvg-filters"
+version = "0.48.1"
+keywords = ["svg", "filter", "raster"]
+license.workspace = true
+edition = "2024"
+rust-version = "1.85.0"
+description = "Low-level raster operations used by SVG filter primitives."
+repository = "https://github.com/linebender/resvg"
+workspace = "../.."
+
+[dependencies]
+bytemuck = "1.16"
+rgb = "0.8"
+strict-num = "0.1.1"

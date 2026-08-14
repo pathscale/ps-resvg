@@ -7,7 +7,7 @@ use rgb::FromSlice;
 use tiny_skia::IntRect;
 use usvg::{ApproxEqUlps, ApproxZeroUlps};
 
-mod low_level;
+use resvg_filters as low_level;
 
 use low_level::{
     ImageRef, ImageRefMut, box_blur, color_matrix, component_transfer, composite, convolve_matrix,
