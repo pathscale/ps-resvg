@@ -1,5 +1,17 @@
 [package]
-name = "usvg"
+# Published as `ps-usvg` because `usvg` on crates.io is linebender's. This copy
+# carries two things that one does not, both of which ps-blitz depends on:
+# `pub use svgtypes` and `Tree::intrinsic_dimensions`.
+#
+# Those reached consumers through a `[patch.crates-io]` pointing at a git
+# branch, which works for a build and not for a publish: cargo ignores `[patch]`
+# when packaging, so `ps-blitz-dom` verified against the registry's usvg and
+# failed with `unresolved import usvg::svgtypes`. That blocked the whole engine
+# from being published at all.
+#
+# The `[lib]` name stays `usvg`, so every `use usvg::` is unchanged and the
+# patch table can be dropped for a plain version requirement.
+name = "ps-usvg"
 version = "0.48.1"
 keywords = ["svg"]
 license.workspace = true
@@ -7,14 +19,20 @@ edition = "2024"
 rust-version = "1.85.0"
 description = "An SVG simplification library."
 categories = ["multimedia::images"]
-repository = "https://github.com/linebender/resvg"
-documentation = "https://docs.rs/usvg/"
+repository = "https://github.com/pathscale/ps-resvg"
+documentation = "https://docs.rs/ps-usvg/"
 readme = "README.md"
 exclude = ["tests"]
 workspace = "../.."
 
+[lib]
+name = "usvg"
+
 [[bin]]
 name = "usvg"
+# Named explicitly because bin auto-discovery follows the *package* name, which
+# is now `ps-usvg`, and `src/bin/ps-usvg.rs` does not exist.
+path = "src/main.rs"
 required-features = ["svgz", "text", "system-fonts", "memmap-fonts", "writer"]
 
 [dependencies]

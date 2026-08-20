@@ -378,6 +378,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "ps-usvg"
+version = "0.48.1"
+dependencies = [
+ "base64",
+ "data-url",
+ "flate2",
+ "fontdb",
+ "harfrust",
+ "imagesize",
+ "kurbo",
+ "log",
+ "once_cell",
+ "pico-args",
+ "roxmltree 0.21.1",
+ "simplecss",
+ "siphasher 1.0.3",
+ "skrifa",
+ "strict-num",
+ "svgtypes",
+ "tiny-skia-path",
+ "unicode-bidi",
+ "unicode-script",
+ "unicode-vo",
+ "xmlwriter",
+]
+
+[[package]]
 name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -529,10 +556,10 @@ dependencies = [
  "once_cell",
  "pico-args",
  "png",
+ "ps-usvg",
  "rgb",
  "svgtypes",
  "tiny-skia",
- "usvg",
  "zune-jpeg",
 ]
 
@@ -714,33 +741,6 @@ name = "unicode-vo"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1d386ff53b415b7fe27b50bb44679e2cc4660272694b7b6f3326d8480823a94"
-
-[[package]]
-name = "usvg"
-version = "0.48.1"
-dependencies = [
- "base64",
- "data-url",
- "flate2",
- "fontdb",
- "harfrust",
- "imagesize",
- "kurbo",
- "log",
- "once_cell",
- "pico-args",
- "roxmltree 0.21.1",
- "simplecss",
- "siphasher 1.0.3",
- "skrifa",
- "strict-num",
- "svgtypes",
- "tiny-skia-path",
- "unicode-bidi",
- "unicode-script",
- "unicode-vo",
- "xmlwriter",
-]
 
 [[package]]
 name = "version_check"

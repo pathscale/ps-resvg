@@ -23,7 +23,7 @@ pico-args = { version = "0.5", features = ["eq-separator"] }
 rgb = "0.8"
 svgtypes = "0.16.1"
 tiny-skia = "0.12.0"
-usvg = { path = "../usvg", version = "0.48.1", default-features = false }
+usvg = { package = "ps-usvg", path = "../usvg", version = "0.48.1", default-features = false }
 zune-jpeg = { version = "0.5.9", optional = true }
 
 [dev-dependencies]
