@@ -38,6 +38,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          persist-credentials: false
 
       - name: Build resvg
         run: cargo build --release
@@ -92,6 +94,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          persist-credentials: false
 
       # Toolchain is stable-x86_64-pc-windows-msvc by default. No need to change it.
 
@@ -154,6 +158,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          persist-credentials: false
 
       # Some weird CI glitch. Make sure we have the latest Rust.
       - name: Install latest stable toolchain
@@ -196,6 +202,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          persist-credentials: false
 
       # Some weird CI glitch. Make sure we have the latest Rust.
       - name: Install latest stable toolchain
