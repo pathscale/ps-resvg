@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # TODO: Enable this when more of the Linebender CI has been applied.
       #- name: install stable toolchain
@@ -35,6 +37,8 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v3
+      with:
+        persist-credentials: false
 
     # We have to use the Release mode, otherwise it would take forever.
     - name: Test
@@ -61,6 +65,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          persist-credentials: false
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -76,6 +82,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          persist-credentials: false
 
       # Toolchain is stable-x86_64-pc-windows-msvc by default. No need to change it.
 
@@ -95,6 +103,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: check typos
         uses: crate-ci/typos@v1.28.4
